@@ -16,6 +16,7 @@ return {
       "cpp", -- C++ (Essential for your ROS/robotics work)
       "cmake",
       "diff",
+      "dockerfile", -- Dockerfile
       "dtd", -- Document Type Definition, needed for XML
       "json",
       "lua", -- Neovim config

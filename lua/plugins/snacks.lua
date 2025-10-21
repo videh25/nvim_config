@@ -13,5 +13,12 @@ return {
     notifier = {
       timeout = 5000, -- Make notifications last for 5 secs
     },
+    picker = {
+      sources = {
+        explorer = {
+          hidden = true,
+        },
+      },
+    },
   },
 }

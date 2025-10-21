@@ -14,6 +14,7 @@ return {
       "bash-language-server", -- bash
       "clangd", -- C, C++
       "cmake-language-server", -- CMake
+      "docker-language-server", -- dockerfile
       "stylua", -- lua
       "vim-language-server", -- vim
       "pyright", -- python
@@ -24,6 +25,7 @@ return {
 
       -- Linters:
       "cpplint", -- C, C++
+      "hadolint", -- dockerfile
       "ruff", -- python
 
       -- Formatters:
