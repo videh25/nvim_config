@@ -4,3 +4,4 @@
 
 -- Disable LazyVim's default autoformat on save (which uses conform.nvim)
 vim.g.autoformat = false
+vim.g.root_spec = { { ".git", "lua" }, "cwd", "lsp" }
