@@ -1,5 +1,6 @@
 -- Switch AI CLI agent with :CodeAgent gemini|claude
 -- or interactively with <leader>a?
+-- Launch or resume a session with <leader>a/
 
 local all_agents = { "gemini", "claude" }
 
@@ -48,6 +49,79 @@ end, {
   end,
 })
 
+-- Parse `gemini --list-sessions` output into a list of {index, label} entries.
+-- Expected format (one session per line): "1. <title>" or "1) <title>"
+local function get_gemini_sessions()
+  local lines = vim.fn.systemlist("gemini --list-sessions 2>/dev/null")
+  local sessions = {}
+  for _, line in ipairs(lines) do
+    local idx, name = line:match("^%s*(%d+)[.)%]]%s+(.*)")
+    if idx then
+      table.insert(sessions, { index = tonumber(idx), label = name:match("^(.-)%s*$") })
+    end
+  end
+  return sessions
+end
+
+local labels = { gemini = " Gemini AI ", claude = " Claude AI " }
+
+local function launch(agent, cmd)
+  require("snacks").terminal.toggle(cmd, {
+    win = {
+      position = "right",
+      width = 0.4,
+      wo = { winbar = labels[agent] or (" " .. agent .. " ") },
+    },
+  })
+end
+
+local function pick_gemini_session()
+  local sessions = get_gemini_sessions()
+  if #sessions == 0 then
+    vim.notify("No previous Gemini sessions found, starting new session.", vim.log.levels.INFO)
+    launch("gemini", "gemini")
+    return
+  end
+
+  local items = { "Latest session" }
+  for _, s in ipairs(sessions) do
+    table.insert(items, s.label)
+  end
+
+  vim.ui.select(items, { prompt = "Select Gemini session" }, function(selected)
+    if not selected then return end
+    if selected == "Latest session" then
+      launch("gemini", "gemini --resume latest")
+    else
+      for _, s in ipairs(sessions) do
+        if s.label == selected then
+          launch("gemini", "gemini --resume " .. s.index)
+          return
+        end
+      end
+    end
+  end)
+end
+
+local function pick_session_and_launch()
+  local agent = state.code_agent
+
+  vim.ui.select({ "New session", "Resume session" }, {
+    prompt = "Start mode (" .. agent .. ")",
+  }, function(choice)
+    if not choice then return end
+
+    if choice == "New session" then
+      launch(agent, agent)
+    elseif agent == "claude" then
+      -- claude --resume opens a native interactive TUI picker inside the terminal
+      launch("claude", "claude --resume")
+    else
+      pick_gemini_session()
+    end
+  end)
+end
+
 local function pick_agent()
   local agents = available_agents()
   if #agents == 0 then
@@ -57,9 +131,8 @@ local function pick_agent()
   vim.ui.select(agents, {
     prompt = "Select code agent",
     format_item = function(item)
-      local labels = { gemini = " Gemini AI", claude = " Claude AI" }
       local marker = item == state.code_agent and "  (active)" or ""
-      return (labels[item] or item) .. marker
+      return (labels[item] and labels[item]:gsub(" ", "") or item) .. marker
     end,
   }, function(agent)
     if not agent then return end
@@ -83,19 +156,7 @@ return {
   keys = {
     {
       "<leader>a/",
-      function()
-        local agent = state.code_agent
-        local labels = { gemini = " Gemini AI ", claude = " Claude AI " }
-        require("snacks").terminal.toggle(agent, {
-          win = {
-            position = "right",
-            width = 0.4,
-            wo = {
-              winbar = labels[agent] or (" " .. agent .. " "),
-            },
-          },
-        })
-      end,
+      pick_session_and_launch,
       desc = "AI CLI (Right Split)",
     },
     {
