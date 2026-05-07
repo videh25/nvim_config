@@ -52,6 +52,35 @@ local function icon_for(provider_name)
   return nil
 end
 
+-- Latest token/cost usage per session (captured from `usage_update` ACP messages,
+-- which the plugin's own dispatcher silently drops). Rendered in the chat panel
+-- header via the `headers.chat` config below.
+local usage_by_session = {}  -- session_id -> { used, size, cost }
+
+local function format_usage(u)
+  if not u then return nil end
+  local pieces = {}
+  if u.used and u.size and u.size > 0 then
+    local pct = math.floor(u.used / u.size * 100 + 0.5)
+    -- %%%% → "%%" literal in lua, which vim's winbar then renders as a single "%".
+    table.insert(pieces, string.format("%.1fk/%.1fk (%d%%%%)", u.used / 1000, u.size / 1000, pct))
+  end
+  if u.cost and u.cost.amount then
+    table.insert(pieces, string.format("%s%.2f", u.cost.currency or "$", u.cost.amount))
+  end
+  if #pieces == 0 then return nil end
+  return table.concat(pieces, " · ")
+end
+
+local function usage_for_current_tab()
+  local ok, registry = pcall(require, "agentic.session_registry")
+  if not ok then return nil end
+  local tab = vim.api.nvim_get_current_tabpage()
+  local sm  = registry.sessions and registry.sessions[tab]
+  if not sm or not sm.session_id then return nil end
+  return usage_by_session[sm.session_id]
+end
+
 -- Per-session prompt history for <localLeader>k / <localLeader>j scrollback.
 -- Ring buffer of the most recent N prompts. In-memory only; cleared on nvim exit.
 local HISTORY_LIMIT = 10
@@ -175,12 +204,47 @@ return {
       error    = "✗",
     },
 
+    -- Render token/cost usage in the chat panel header. The render function
+    -- runs whenever the header re-renders (forced from on_session_update below
+    -- when usage_update arrives).
+    headers = {
+      chat = function(parts)
+        local pieces = { parts.title }
+        if parts.context then table.insert(pieces, parts.context) end
+        local usage_str = format_usage(usage_for_current_tab())
+        if usage_str then table.insert(pieces, usage_str) end
+        if parts.suffix then table.insert(pieces, parts.suffix) end
+        return table.concat(pieces, " | ")
+      end,
+    },
+
     -- Provider-agnostic notification when the agent finishes a turn.
     -- Fires for any ACP provider (Claude, Gemini, Codex, ...).
     hooks = {
       on_prompt_submit = function(data)
         prompts_by_session[data.session_id] = data.prompt
         record_prompt(data.session_id, data.prompt)
+      end,
+
+      -- Capture usage_update messages and force a chat header re-render so the
+      -- winbar reflects the new stats immediately. The plugin's dispatcher
+      -- silently drops usage_update (session_manager.lua:374) but this hook
+      -- still fires after dispatch.
+      on_session_update = function(data)
+        local update = data.update
+        if not (update and update.sessionUpdate == "usage_update") then return end
+        usage_by_session[data.session_id] = {
+          used = update.used,
+          size = update.size,
+          cost = update.cost,
+        }
+        local ok, registry = pcall(require, "agentic.session_registry")
+        if ok then
+          local sm = registry.sessions and registry.sessions[data.tab_page_id]
+          if sm and sm.widget and sm.widget.render_header then
+            pcall(sm.widget.render_header, sm.widget, "chat")
+          end
+        end
       end,
 
       on_response_complete = function(data)
