@@ -1,5 +1,7 @@
 -- Helpers shared by the response-complete hook and the permission monkey-patch.
 
+local td = require("notif_dash_agentic")
+
 local prompts_by_session = {}
 
 local function brief(text, n)
@@ -221,45 +223,8 @@ return {
     -- Provider-agnostic notification when the agent finishes a turn.
     -- Fires for any ACP provider (Claude, Gemini, Codex, ...).
     hooks = {
-      on_prompt_submit = function(data)
-        prompts_by_session[data.session_id] = data.prompt
-        record_prompt(data.session_id, data.prompt)
-      end,
-
-      -- Capture usage_update messages and force a chat header re-render so the
-      -- winbar reflects the new stats immediately. The plugin's dispatcher
-      -- silently drops usage_update (session_manager.lua:374) but this hook
-      -- still fires after dispatch.
-      on_session_update = function(data)
-        local update = data.update
-        if not (update and update.sessionUpdate == "usage_update") then return end
-        usage_by_session[data.session_id] = {
-          used = update.used,
-          size = update.size,
-          cost = update.cost,
-        }
-        local ok, registry = pcall(require, "agentic.session_registry")
-        if ok then
-          local sm = registry.sessions and registry.sessions[data.tab_page_id]
-          if sm and sm.widget and sm.widget.render_header then
-            pcall(sm.widget.render_header, sm.widget, "chat")
-          end
-        end
-      end,
-
-      on_response_complete = function(data)
-        local prompt = prompts_by_session[data.session_id] or ""
-        prompts_by_session[data.session_id] = nil
-
-        local provider = provider_for_tab(data.tab_page_id) or "Agent"
-        local folder   = vim.fn.fnamemodify(vim.fn.getcwd(), ":t")
-        local status   = data.success and "finished" or "error"
-        local title    = string.format("%s · %s [%s]", provider, status, folder)
-
-        local level   = data.success and vim.log.levels.INFO or vim.log.levels.ERROR
-        local urgency = data.success and "normal" or "critical"
-        notify(level, urgency, title, brief(prompt, 80), icon_for(provider))
-      end,
+        on_response_complete = td.on_response_complete,
+        on_prompt_submit     = td.on_prompt_submit,
     },
   },
 
