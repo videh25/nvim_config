@@ -19,6 +19,7 @@ return {
       "dockerfile", -- Dockerfile
       "dtd", -- Document Type Definition, needed for XML
       "json",
+      "latex", -- math rendering in .tex and markdown via nabla.nvim
       "lua", -- Neovim config
       "vim", -- Vimscript/Neovim config
       "python",
